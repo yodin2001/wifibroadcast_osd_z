@@ -39,6 +39,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <sys/select.h>
 #include <locale.h>
 
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <poll.h>
+
+
 #include "render.h"
 #include "osdconfig.h"
 #include "telemetry.h"
@@ -65,6 +70,35 @@ long long current_timestamp() {
 fd_set set;
 
 struct timeval timeout;
+
+int open_udp_socket_for_rx(int port)
+{
+    struct sockaddr_in saddr;
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0){
+        perror("Error opening socket");
+        exit(1);
+    }
+
+    printf("OSD_PORT=%d\n", port);
+
+    int optval = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (const void *)&optval , sizeof(int));
+
+    bzero((char *) &saddr, sizeof(saddr));
+    saddr.sin_family = AF_INET;
+    saddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    saddr.sin_port = htons((unsigned short)port);
+
+    if (bind(fd, (struct sockaddr *) &saddr, sizeof(saddr)) < 0)
+    {
+        perror("Bind error");
+        exit(1);
+    }
+    return fd;
+}
+
+
 
 int main(int argc, char *argv[]) {
     fprintf(stderr,"OSD started\n=====================================\n\n");
@@ -107,14 +141,33 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    //______UDP TELEMETRY_____________
+    uint64_t render_ts = 0;
+    uint64_t cur_ts = 0;
+    int fd;
+    struct pollfd fds[1];
+    char *osd_port = getenv("OSD_PORT");
+    memset(fds, '\0', sizeof(fds));
+    fd = open_udp_socket_for_rx(osd_port == NULL ? 14550 : atoi(osd_port));
+    if(fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK) < 0)
+    {
+        perror("Unable to set socket into nonblocked mode");
+        exit(1);
+    }
+
+    fds[0].fd = fd;
+    fds[0].events = POLLIN;
+    //----------------------------------
+
+
     fprintf(stderr,"OSD: Initializing sharedmem ...\n");
     telemetry_data_t td;
     telemetry_init(&td);
     fprintf(stderr,"OSD: Sharedmem init done\n");
 
-//    fprintf(stderr,"OSD: Initializing render engine ...\n");
+    fprintf(stderr,"OSD: Initializing render engine ...\n");
     render_init();
-//    fprintf(stderr,"OSD: Render init done\n");
+    fprintf(stderr,"OSD: Render init done\n");
 
     long long prev_time = current_timestamp();
     long long prev_time2 = current_timestamp();
@@ -143,6 +196,7 @@ int main(int argc, char *argv[]) {
 //		fprintf(stderr," start while ");
 //		prev_time = current_timestamp();
 
+/*
 	    FD_ZERO(&set);
 	    FD_SET(readfd, &set);
 	    timeout.tv_sec = 0;
@@ -157,18 +211,52 @@ int main(int argc, char *argv[]) {
 		    perror("OSD: read");
 		    exit(-1);
 		}
+*/
+
+//______UDP TELEMETRY_____________
+        cur_ts = current_timestamp();
+        uint64_t sleep_ts = render_ts > cur_ts ? render_ts - cur_ts : 0;
+        int rc = poll(fds, 1, 50);
+
+                if (rc < 0){
+            if (errno == EINTR || errno == EAGAIN) continue;
+            perror("Poll error");
+            exit(1);
+        }
+
+        if (fds[0].revents & (POLLERR | POLLNVAL))
+        {
+            fprintf(stderr, "socket error!");
+            exit(1);
+        }
+
+        if (fds[0].revents & POLLIN){
+            ssize_t rsize;
+            while((rsize = recv(fd, buf, sizeof(buf), 0)) >= 0)
+            {
+                //fprintf(stderr, "recieved %d bytes\n", rsize);
 #ifdef FRSKY
-		frsky_parse_buffer(&fs, &td, buf, n);
+	        	frsky_parse_buffer(&fs, &td, buf, rsize);
 #elif defined(LTM)
-		do_render = ltm_read(&td, buf, n);
+	        	do_render = ltm_read(&td, buf, rsize);
 #elif defined(MAVLINK)
-		do_render = mavlink_read(&td, buf, n);
+	        	do_render = mavlink_read(&td, buf, rsize);
 #elif defined(SMARTPORT)
-		smartport_read(&td, buf, n);
+	        	smartport_read(&td, buf, rsize);
 #elif defined(VOT)
-		do_render =  vot_read(&td, buf, n);
+	        	do_render =  vot_read(&td, buf, rsize);
+                fprintf(stderr, "\n");
 #endif
-	    }
+            }
+            if (rsize < 0 && errno != EWOULDBLOCK){
+                perror("Error receiving packet");
+                exit(1);
+            }
+        }
+//_________________________________
+
+
+	    //}
 	    counter++;
 //	    fprintf(stderr,"OSD: counter: %d\n",counter);
 	    // render only if we have data that needs to be processed as quick as possible (attitude)
@@ -213,7 +301,7 @@ int main(int argc, char *argv[]) {
 		    fpscount_ts_last = current_timestamp();
 		    fps = (fpscount - fpscount_last) / 2;
 		    fpscount_last = fpscount;
-//		    fprintf(stderr,"OSD FPS: %d\n", fps);
+		    //fprintf(stderr,"OSD FPS: %d\n", fps);
 		}
     }
     return 0;
