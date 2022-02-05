@@ -129,7 +129,7 @@ void loopUpdate(telemetry_data_t *td) {
     
  }
 
-void render(telemetry_data_t *td, uint8_t cpuload_gnd, uint8_t temp_gnd, uint8_t undervolt, int osdfps) {
+void render(telemetry_data_t *td, int osdfps) {
 
     // call loopUpdate to update stuff that should be updated even when particular elements are off (like total curent);
     loopUpdate(td);
@@ -137,8 +137,6 @@ void render(telemetry_data_t *td, uint8_t cpuload_gnd, uint8_t temp_gnd, uint8_t
     Start(width,height); // render start
     setfillstroke();
 
-    if (td->rx_status_sysair->undervolt == 1) draw_message(0,"Undervoltage on TX","  ","Bitrate limited to 1 Mbit",WARNING_POS_X, WARNING_POS_Y, GLOBAL_SCALE);
-    if (undervolt == 1) draw_message(0,"Undervoltage on RX","  "," ",WARNING_POS_X, WARNING_POS_Y, GLOBAL_SCALE);
 
     #if defined(FRSKY)
     //we assume that we have a fix if we get the NS and EW values from frsky protocol
@@ -235,7 +233,7 @@ void render(telemetry_data_t *td, uint8_t cpuload_gnd, uint8_t temp_gnd, uint8_t
     #endif
 
 
- //    draw_osdinfos(osdfps, 20, 20, 1);
+     draw_osdinfos(osdfps, 20, 20, 1);
 
 
 #ifdef UPLINK_RSSI
@@ -244,12 +242,12 @@ void render(telemetry_data_t *td, uint8_t cpuload_gnd, uint8_t temp_gnd, uint8_t
 
 
 #ifdef KBITRATE
-    draw_kbitrate(td->rx_status_sysair->cts, td->rx_status->kbitrate, td->rx_status_sysair->bitrate_measured_kbit, td->rx_status_sysair->bitrate_kbit, td->rx_status_sysair->skipped_fec_cnt, td->rx_status_sysair->injection_fail_cnt,td->rx_status_sysair->injection_time_block, td->armed, KBITRATE_POS_X, KBITRATE_POS_Y, KBITRATE_SCALE * GLOBAL_SCALE, KBITRATE_WARN, KBITRATE_CAUTION, KBITRATE_DECLUTTER);
+    draw_kbitrate(/*td->rx_status_sysair->cts*/0, td->rx_status->kbitrate, td->rx_status->kbitrate_measured, td->rx_status->kbitrate, /*td->rx_status->skipped_fec_cnt*/0, td->rx_status->injection_fail_cnt,/*td->rx_status_sysair->injection_time_block*/0, td->armed, KBITRATE_POS_X, KBITRATE_POS_Y, KBITRATE_SCALE * GLOBAL_SCALE, KBITRATE_WARN, KBITRATE_CAUTION, KBITRATE_DECLUTTER);
  #endif
 
 
 #ifdef SYS
-    draw_sys(td->rx_status_sysair->cpuload, td->rx_status_sysair->temp, cpuload_gnd, temp_gnd, td->armed, SYS_POS_X, SYS_POS_Y, SYS_SCALE * GLOBAL_SCALE, CPU_LOAD_WARN, CPU_LOAD_CAUTION, CPU_TEMP_WARN, CPU_TEMP_CAUTION, SYS_DECLUTTER);
+    draw_sys(td->rx_status->cpuload_air, td->rx_status->temp_air, td->rx_status->cpuload_gnd, td->rx_status->temp_gnd, td->armed, SYS_POS_X, SYS_POS_Y, SYS_SCALE * GLOBAL_SCALE, CPU_LOAD_WARN, CPU_LOAD_CAUTION, CPU_TEMP_WARN, CPU_TEMP_CAUTION, SYS_DECLUTTER);
  #endif
 
 
@@ -420,10 +418,10 @@ void render(telemetry_data_t *td, uint8_t cpuload_gnd, uint8_t temp_gnd, uint8_t
             if (best_dbm < td->rx_status->adapter[i].current_signal_dbm) best_dbm = td->rx_status->adapter[i].current_signal_dbm;
         }
     }
-    draw_total_signal(best_dbm, td->rx_status->received_block_cnt, td->rx_status->damaged_block_cnt, td->rx_status->lost_packet_cnt, td->rx_status->received_packet_cnt, td->rx_status->lost_per_block_cnt, DOWNLINK_RSSI_POS_X, DOWNLINK_RSSI_POS_Y, DOWNLINK_RSSI_SCALE * GLOBAL_SCALE);
+    draw_total_signal(best_dbm, td->rx_status->damaged_block_cnt, td->rx_status->lost_packet_cnt, td->rx_status->received_packet_cnt, /*td->rx_status->lost_per_block_cnt*/0, DOWNLINK_RSSI_POS_X, DOWNLINK_RSSI_POS_Y, DOWNLINK_RSSI_SCALE * GLOBAL_SCALE);
     #ifdef DOWNLINK_RSSI_DETAILED
     for(j=0; j<ac; ++j) {
-        draw_card_signal(td->rx_status->adapter[j].current_signal_dbm, td->rx_status->adapter[j].signal_good, j, ac, td->rx_status->tx_restart_cnt, td->rx_status->adapter[j].received_packet_cnt, td->rx_status->adapter[j].wrong_crc_cnt, td->rx_status->adapter[j].type, td->rx_status->received_packet_cnt, td->rx_status->lost_packet_cnt, DOWNLINK_RSSI_DETAILED_POS_X, DOWNLINK_RSSI_DETAILED_POS_Y, DOWNLINK_RSSI_DETAILED_SCALE * GLOBAL_SCALE);
+        draw_card_signal(td->rx_status->adapter[j].current_signal_dbm, td->rx_status->adapter[j].signal_good, j, ac, /*td->rx_status->tx_restart_cnt*/0, td->rx_status->adapter[j].received_packet_cnt, /*td->rx_status->adapter[j].wrong_crc_cnt*/0, td->rx_status->adapter[j].type, td->rx_status->received_packet_cnt, td->rx_status->lost_packet_cnt, DOWNLINK_RSSI_DETAILED_POS_X, DOWNLINK_RSSI_DETAILED_POS_Y, DOWNLINK_RSSI_DETAILED_SCALE * GLOBAL_SCALE);
     }
     #endif
  #endif
@@ -2035,7 +2033,7 @@ void draw_card_signal(int8_t signal, int signal_good, int card, int adapter_cnt,
 
 
 
-void draw_total_signal(int8_t signal, int goodblocks, int badblocks, int packets_lost, int packets_received, int lost_per_block, float pos_x, float pos_y, float scale){
+void draw_total_signal(int8_t signal, int badblocks, int packets_lost, int packets_received, int lost_per_block, float pos_x, float pos_y, float scale){
     float text_scale = getWidth(2) * scale;
     VGfloat height_text = TextHeight(myfont, text_scale*0.6)+getHeight(0.3)*scale;
     VGfloat width_value = TextWidth("-00", myfont, text_scale);
@@ -2062,7 +2060,7 @@ void draw_total_signal(int8_t signal, int goodblocks, int badblocks, int packets
 
     Text(getWidth(pos_x)+getWidth(0.4), getHeight(pos_y), "dBm", myfont, text_scale*0.6);
 
-    int percent_badblocks=(int)((double)badblocks/goodblocks*100);
+    int percent_badblocks=(int)((double)badblocks/packets_received*100);
     int percent_packets_lost=(int)((double)packets_lost/packets_received*100);
 
     sprintf(buffer, "%d (%d%%)/%d (%d%%)", badblocks, percent_badblocks, packets_lost, percent_packets_lost);
@@ -2070,7 +2068,7 @@ void draw_total_signal(int8_t signal, int goodblocks, int badblocks, int packets
     Text(getWidth(pos_x)-width_value-width_symbol+2, getHeight(pos_y)-height_text, buffer, myfont, text_scale*0.6);
 
     TextEnd(getWidth(pos_x)-width_value - getWidth(0.3) * scale, getHeight(pos_y), "", osdicons, text_scale * 0.7);
-
+/*
 	//MOVING AVERAGE: LOST PER BLOCK (LPB)
 	int lpb_average=0;
 	int lpb_sum=0;
@@ -2133,6 +2131,7 @@ void draw_total_signal(int8_t signal, int goodblocks, int badblocks, int packets
     default:
         sprintf(buffer, "█");
         Fill(255,0,4,0.5); // red
+
     }
     
     #if DOWNLINK_RSSI_FEC_BAR == true
@@ -2150,6 +2149,7 @@ void draw_total_signal(int8_t signal, int goodblocks, int badblocks, int packets
 
 
     #endif
+    */
  }
 
 

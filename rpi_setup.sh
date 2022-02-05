@@ -1,13 +1,8 @@
 #!/bin/bash
-set -e
-set -x
+systemctl stop fpv-video
+systemctl stop osd
 
-apt-get update
-apt-get install build-essential libraspberrypi0 libraspberrypi-bin gstreamer1.0-tools gstreamer1.0-plugins-good
-
-make mode=rpi codec=h264
-
-cp -a osd fpv_video/{fpv_video,fpv_video.sh} /usr/bin
+cp -a build/osd fpv_video/{fpv_video,fpv_video.sh} /usr/bin
 
 cat > /etc/systemd/system/osd.service <<EOF
 [Unit]
@@ -15,7 +10,8 @@ Description=FPV OSD
 After=network-online.target
 
 [Service]
-ExecStart=/bin/openvt -s -e -- bash -c 'TERM=linux setterm --blank force --clear all --cursor off /dev/tty && exec /usr/bin/osd'
+#ExecStart=/bin/openvt -s -e -- bash -c 'TERM=linux setterm --blank force --clear all --cursor off /dev/tty && exec /usr/bin/osd'
+ExecStart=/usr/bin/osd
 Type=simple
 Restart=always
 RestartSec=1s

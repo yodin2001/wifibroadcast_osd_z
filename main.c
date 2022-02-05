@@ -47,7 +47,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "render.h"
 #include "osdconfig.h"
 #include "telemetry.h"
-#include "telemetry_loger.h"
 #ifdef FRSKY
 #include "frsky.h"
 #elif defined(LTM)
@@ -71,7 +70,12 @@ fd_set set;
 
 struct timeval timeout;
 
-int open_udp_socket_for_rx(int port)
+
+uint8_t telem_buf[263];
+struct pollfd fds1[1];
+int o_res;
+
+int open_udp_socket_for_rx(int port, struct pollfd *pollfd_struct)
 {
     struct sockaddr_in saddr;
     int fd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -95,7 +99,43 @@ int open_udp_socket_for_rx(int port)
         perror("Bind error");
         exit(1);
     }
+
+    pollfd_struct[0].fd = fd;
+    pollfd_struct[0].events = POLLIN;
+
     return fd;
+}
+
+
+void get_rssi(telemetry_data_t *td)
+{
+    int rc = poll(fds1, 1, 10);
+
+    if (fds1[0].revents & (POLLERR | POLLNVAL))
+    {
+        fprintf(stderr, "socket error!");
+        exit(1);
+    }
+
+        if (fds1[0].revents & POLLIN){
+            ssize_t rsize;
+            while((rsize = recv(o_res, telem_buf, sizeof(telem_buf), 0)) >= 0)
+            {
+                //fprintf(stderr, "recieved %d bytes\n", rsize);
+                //memcpy(&(td->rx_status) , &telem_buf, rsize);
+                //fprintf(stderr,"recieved blocks %d\n", td->rx_status->received_block_cnt ); 
+                td->rx_status = (wifibroadcast_rx_status_forward_t *)&telem_buf;
+                //wifibroadcast_rx_status_forward_t *test = (wifibroadcast_rx_status_forward_t *)&telem_buf;
+                //fprintf(stderr,"value %d\n", test->cpuload_air); 
+                
+            }
+            if (rsize < 0 && errno != EWOULDBLOCK){
+                perror("Error receiving packet");
+                exit(1);
+            }
+        }
+
+    
 }
 
 
@@ -118,6 +158,18 @@ int main(int argc, char *argv[]) {
 
     int do_render = 0;
     int counter = 0;
+
+    
+    o_res = open_udp_socket_for_rx(5003, (struct pollfd *) &fds1);
+    if(fcntl(o_res, F_SETFL, fcntl(o_res, F_GETFL, 0) | O_NONBLOCK) < 0)
+    {
+        perror("Unable to set socket into nonblocked mode");
+        exit(1);
+    }
+
+
+
+    
 
 
 #ifdef FRSKY
@@ -142,21 +194,18 @@ int main(int argc, char *argv[]) {
     }
 
     //______UDP TELEMETRY_____________
-    uint64_t render_ts = 0;
-    uint64_t cur_ts = 0;
     int fd;
     struct pollfd fds[1];
     char *osd_port = getenv("OSD_PORT");
     memset(fds, '\0', sizeof(fds));
-    fd = open_udp_socket_for_rx(osd_port == NULL ? 14550 : atoi(osd_port));
+    fd = open_udp_socket_for_rx(osd_port == NULL ? 14550 : atoi(osd_port), (struct pollfd *) &fds);
     if(fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK) < 0)
     {
         perror("Unable to set socket into nonblocked mode");
         exit(1);
     }
 
-    fds[0].fd = fd;
-    fds[0].events = POLLIN;
+    
     //----------------------------------
 
 
@@ -165,6 +214,7 @@ int main(int argc, char *argv[]) {
     telemetry_init(&td);
     fprintf(stderr,"OSD: Sharedmem init done\n");
 
+
     fprintf(stderr,"OSD: Initializing render engine ...\n");
     render_init();
     fprintf(stderr,"OSD: Render init done\n");
@@ -172,53 +222,15 @@ int main(int argc, char *argv[]) {
     long long prev_time = current_timestamp();
     long long prev_time2 = current_timestamp();
 
-    long long prev_cpu_time = current_timestamp();
-    long long delta = 0;
-
-    int cpuload_gnd = 0;
-    int temp_gnd = 0;
-    int undervolt_gnd = 0;
-    FILE *fp;
-    FILE *fp2;
-    FILE *fp3;
-    long double a[4], b[4];
-
-    fp3 = fopen("/tmp/undervolt","r");
-    if(NULL == fp3) {
-        perror("ERROR: Could not open /tmp/undervolt");
-        exit(EXIT_FAILURE);
-    }
-    fscanf(fp3,"%d",&undervolt_gnd);
-    fclose(fp3);
-//    fprintf(stderr,"undervolt:%d\n",undervolt_gnd);
 
     while(1) {
-//		fprintf(stderr," start while ");
-//		prev_time = current_timestamp();
 
-/*
-	    FD_ZERO(&set);
-	    FD_SET(readfd, &set);
-	    timeout.tv_sec = 0;
-	    timeout.tv_usec = 50 * 1000;
-	    // look for data 50ms, then timeout
-	    n = select(readfd + 1, &set, NULL, NULL, &timeout);
-	    if(n > 0) { // if data there, read it and parse it
-	        n = read(readfd, buf, sizeof(buf));
-//	        printf("OSD: %d bytes read\n",n);
-	        if(n == 0) { continue; } // EOF
-		if(n<0) {
-		    perror("OSD: read");
-		    exit(-1);
-		}
-*/
+    get_rssi(&td);
 
 //______UDP TELEMETRY_____________
-        cur_ts = current_timestamp();
-        uint64_t sleep_ts = render_ts > cur_ts ? render_ts - cur_ts : 0;
         int rc = poll(fds, 1, 50);
 
-                if (rc < 0){
+        if (rc < 0){
             if (errno == EINTR || errno == EAGAIN) continue;
             perror("Poll error");
             exit(1);
@@ -255,7 +267,6 @@ int main(int argc, char *argv[]) {
         }
 //_________________________________
 
-
 	    //}
 	    counter++;
 //	    fprintf(stderr,"OSD: counter: %d\n",counter);
@@ -265,34 +276,13 @@ int main(int argc, char *argv[]) {
 //		fprintf(stderr," rendering! ");
 		prev_time = current_timestamp();
 		fpscount++;
-		render(&td, cpuload_gnd, temp_gnd/1000, undervolt_gnd,fps);
+		render(&td, fps);
 		long long took = current_timestamp() - prev_time;
 //		fprintf(stderr,"Render took %lldms\n", took);
 		do_render = 0;
 		counter = 0;
 	    }
-        telemetry_loging(&td, current_timestamp(), 5);
-	    delta = current_timestamp() - prev_cpu_time;
-	    if (delta > 1000) {
-		prev_cpu_time = current_timestamp();
-//		fprintf(stderr,"delta > 10000\n");
-
-		fp2 = fopen("/sys/class/thermal/thermal_zone0/temp","r");
-		fscanf(fp2,"%d",&temp_gnd);
-		fclose(fp2);
-//		fprintf(stderr,"temp gnd:%d\n",temp_gnd/1000);
-
-		fp = fopen("/proc/stat","r");
-		fscanf(fp,"%*s %Lf %Lf %Lf %Lf",&a[0],&a[1],&a[2],&a[3]);
-		fclose(fp);
-
-		cpuload_gnd = (((b[0]+b[1]+b[2]) - (a[0]+a[1]+a[2])) / ((b[0]+b[1]+b[2]+b[3]) - (a[0]+a[1]+a[2]+a[3]))) * 100;
-//		fprintf(stderr,"cpuload gnd:%d\n",cpuload_gnd);
-
-		fp = fopen("/proc/stat","r");
-		fscanf(fp,"%*s %Lf %Lf %Lf %Lf",&b[0],&b[1],&b[2],&b[3]);
-		fclose(fp);
-	    }
+        
 //		long long took = current_timestamp() - prev_time;
 //		fprintf(stderr,"while took %lldms\n", took);
 

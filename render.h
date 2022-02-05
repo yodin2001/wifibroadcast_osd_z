@@ -29,13 +29,13 @@
 #define TO_DEG 180.0f / M_PI
 void render_init();
 void setfillstroke();
-void render(telemetry_data_t *td, uint8_t cpuload_gnd, uint8_t temp_gnd, uint8_t undervolt, int fps);
+void render(telemetry_data_t *td, int fps);
 
 void rotatePoints(float *x, float *y, float angle, int points, int center_x, int center_y); //rotate a polyline/polygon
 float distance_between(float lat1, float long1, float lat2, float long2);
 float course_to (float lat1, float long1, float lat2, float long2);
 
-void draw_total_signal(int8_t signal, int goodblocks, int badblocks, int packets_lost, int packets_received, int lost_per_block, float pos_x, float pos_y, float scale);
+void draw_total_signal(int8_t signal, int badblocks, int packets_lost, int packets_received, int lost_per_block, float pos_x, float pos_y, float scale);
 void draw_card_signal(int8_t signal, int signal_good, int card, int adapter_cnt, int restart_count, int packets, int wrongcrcs, int type, int totalpackets, int totalpacketslost, float pos_x, float pos_y, float scale);
 void draw_uplink_signal(int8_t uplink_signal, int uplink_lostpackets, int8_t rc_signal, int rc_lostpackets, float pos_x, float pos_y, float scale);
 

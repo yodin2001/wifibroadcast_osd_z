@@ -111,7 +111,7 @@
 #define DOWNLINK_RSSI_DETAILED_POS_Y 90
 #define DOWNLINK_RSSI_DETAILED_SCALE 0.75
 
-#define UPLINK_RSSI     //网卡上行
+//#define UPLINK_RSSI     //网卡上行
 #define UPLINK_RSSI_POS_X 25
 #define UPLINK_RSSI_POS_Y 96
 #define UPLINK_RSSI_SCALE 1

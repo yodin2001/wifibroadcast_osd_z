@@ -4,11 +4,11 @@ LDFLAGS+=-L/opt/vc/lib/ -lbrcmGLESv2 -lbrcmEGL -lopenmaxil -lbcm_host -lvcos -lv
 
 all: osd
 
-/tmp/%.o: %.c
+build/%.o: %.c
 	gcc -c -o $@ $< $(CPPFLAGS)
 
-osd: /tmp/main.o /tmp/render.o /tmp/telemetry.o /tmp/frsky.o /tmp/ltm.o /tmp/mavlink.o /tmp/smartport.o /tmp/vot.o /tmp/telemetry_loger.o
-	gcc -o /tmp/$@ $^ $(LDFLAGS)
+osd: build/main.o build/render.o build/telemetry.o build/frsky.o build/ltm.o build/mavlink.o build/smartport.o build/vot.o
+	gcc -o build/$@ $^ $(LDFLAGS)
 
 clean:
-	rm -f /tmp/osd /tmp/*.o /tmp/*~
+	rm -f build/osd build/*.o build/*~
